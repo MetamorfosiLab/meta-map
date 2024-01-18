@@ -1,17 +1,38 @@
 {
   "name": "meta-map",
-  "private": true,
-  "version": "0.0.0",
   "type": "module",
+  "version": "0.0.0",
+  "private": true,
   "packageManager": "pnpm@8.14.1",
+  "repository": "MetamorfosiLab/meta-map",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "prepare": "pnpm simple-git-hooks"
   },
   "devDependencies": {
+    "@antfu/eslint-config": "^2.6.3",
+    "@commitlint/cli": "^18.4.4",
+    "@commitlint/config-conventional": "^18.4.4",
+    "bumpp": "^9.3.0",
+    "eslint": "^8.56.0",
+    "lint-staged": "^15.2.0",
     "pnpm": "8.14.1",
+    "simple-git-hooks": "^2.9.0",
     "typescript": "^5.2.2",
     "vite": "^5.0.8"
+  },
+  "commitlint": {
+    "extends": [
+      "@commitlint/config-conventional"
+    ]
+  },
+  "simple-git-hooks": {
+    "pre-commit": "pnpm lint-staged",
+    "commit-msg": "pnpm commitlint --edit ${1}"
+  },
+  "lint-staged": {
+    "*": "eslint --fix"
   }
 }
