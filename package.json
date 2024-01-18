@@ -1,10 +1,24 @@
 {
-  "name": "meta-map",
+  "name": "@metamorfosilab/meta-map",
   "type": "module",
   "version": "0.0.1",
-  "private": true,
   "packageManager": "pnpm@8.14.1",
-  "repository": "MetamorfosiLab/meta-map",
+  "description": "Package for using interactive map in you project :)",
+  "license": "MIT",
+  "homepage": "https://github.com/MetamorfosiLab/meta-map#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MetamorfosiLab/meta-map.git"
+  },
+  "bugs": {
+    "url": "https://github.com/MetamorfosiLab/meta-map/issues"
+  },
+  "keywords": [
+    "map",
+    "typescript",
+    "vite"
+  ],
+  "main": "./dist/meta-map.js",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
