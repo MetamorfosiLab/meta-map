@@ -1,9 +1,33 @@
-import { configDefault } from "./defaults";
 import { Selection, select, selectAll } from "d3-selection";
 import { geoPath, geoMercator } from "d3-geo";
 import { zoom, zoomIdentity } from "d3-zoom";
 import { json } from "d3-fetch";
-import MapConfig from "./types/interfaces";
+import MapConfig, {
+  CountryGradientSettings,
+  MarkerStyle,
+} from "./types/interfaces";
+
+const DEFAULT_MARKERS_STYLE = {
+  color: "blue",
+  img: null,
+  width: 20,
+  height: 20,
+  radius: 2,
+};
+
+const DEFAULT_ON = {
+  countryClick: () => {},
+  countryMouseEnter: () => {},
+  countryMouseLeave: () => {},
+  markerClick: () => {},
+  markerMouseEnter: () => {},
+  markerMouseLeave: () => {},
+};
+
+const DEFAULT_CONFIG: MapConfig = {
+  maxZoom: 20,
+  countryStrokeWidth: "0.25px",
+};
 
 /**
  * @class MetaMap
@@ -17,31 +41,68 @@ export default class MetaMap {
   selector: string;
   config: MapConfig;
 
-  zoomedCountries: string[];
-  selectedCountries: string[];
-  markers: any[];
+  maxZoom?: number;
+  zoomedCountries?: string[] | null;
+  selectedCountries?: string[];
+  countryStrokeWidth?: string;
+  countryFillColor: string;
+  countryStrokeColor?: string;
+  accentFillColor: string;
+  accentStrokeColor?: string;
+  width?: number;
+  height?: number;
+  markers?: any[]; // Потрібно визначити тип масиву для маркерів
+  markerStyle?: MarkerStyle;
+  on: {
+    countryClick: Function;
+    countryMouseEnter: Function;
+    countryMouseLeave: Function;
+    markerClick: Function;
+    markerMouseEnter: Function;
+    markerMouseLeave: Function;
+  };
 
-  svg: Selection<SVGSVGElement, unknown, HTMLElement, any> | undefined;
-  scale: number | undefined;
-  translate: [number, number] | undefined;
-  projection: GeoProjection;
+  countryFillColorType: "string" | "gradient";
+  accentFillColorType: "string" | "gradient";
+  countryGradientSettings: CountryGradientSettings | null | string;
+  accentGradientSettings: CountryGradientSettings | null | string;
+  svg: Selection<SVGSVGElement, unknown, HTMLElement, any> & string;
 
   // TODO: make default values object and rest with passed config object
   constructor(selector: string, config: MapConfig) {
     this.selector = selector;
-    this.config = { ...configDefault, ...config };
+    this.config = { ...DEFAULT_CONFIG, ...config };
+    const {
+      maxZoom = 20,
+      zoomedCountries,
 
-    this.zoomedCountries = this.config.zoomedCountries;
+      selectedCountries,
 
-    this.selectedCountries = this.config.selectedCountries;
+      markers,
+      markerStyle,
 
-    this.markers = this.config.markers;
+      on,
+    } = this.config;
+
+    this.zoomedCountries = zoomedCountries;
+
+    this.selectedCountries = selectedCountries ?? [];
+
+    this.markers = markers ?? [];
+
+    this.markerStyle = {
+      ...DEFAULT_MARKERS_STYLE,
+      ...markerStyle,
+    };
+
+    this.on = { ...DEFAULT_ON, ...on };
 
     this.init();
   }
   init() {
     this.#setupSvg();
     this.#setupMap();
+    this.#setupGradients();
     this.#setupZoom();
     this.#mapRender();
 
@@ -64,15 +125,15 @@ export default class MetaMap {
       .attr("width", "100%")
       .attr("height", "100%")
       .attr("preserveAspectRatio", "xMinYMin meet")
-      .attr("viewBox", `0 0 ${this.config.width} ${this.config.height}`)
-      .style("fill", this.config.countryFillColor)
+      .attr("viewBox", `0 0 ${this.width} ${this.height}`)
+      .style("fill", this.countryFillColor)
       .style("stroke", "#fff")
-      .style("stroke-width", `${this.config.countryStrokeWidth}px`);
+      .style("stroke-width", this.countryStrokeWidth);
   }
 
   #setupMap() {
-    this.scale = (this.config.width / (Math.PI * 2)) * 0.9 * 0.9;
-    this.translate = [this.config.width / 2, this.config.height / 1.4];
+    this.scale = (this.width / (Math.PI * 2)) * 0.9 * 0.9;
+    this.translate = [this.width / 2, this.height / 1.4];
     this.projection = geoMercator()
       .fitSize([500, 500])
       .scale(this.scale)
@@ -81,12 +142,79 @@ export default class MetaMap {
     this.g = this.svg.append("g");
   }
 
+  #setupGradients() {
+    this.defs = this.svg.append("defs");
+
+    if (this.accentFillColorType === "gradient") {
+      this.accentGradient = this.defs
+        .append("linearGradient")
+        .attr("id", "accentGradient")
+        .attr(
+          "gradientTransform",
+          `rotate(${this.accentGradientSettings.rotate})`
+        );
+
+      this.accentGradient
+        .append("stop")
+        .attr("offset", this.accentGradientSettings?.startColor?.offset ?? "0%")
+        .attr(
+          "stop-color",
+          this.accentGradientSettings?.startColor?.color ??
+            this.accentGradientSettings?.startColor ??
+            "#ffffff"
+        );
+      this.accentGradient
+        .append("stop")
+        .attr("offset", this.accentGradientSettings?.endColor?.offset ?? "100%")
+        .attr(
+          "stop-color",
+          this.accentGradientSettings?.endColor?.color ??
+            this.accentGradientSettings?.endColor ??
+            "#000000"
+        );
+    }
+    if (this.countryFillColorType === "gradient") {
+      this.countryGradient = this.defs
+        .append("linearGradient")
+        .attr("id", "countryGradient")
+        .attr(
+          "gradientTransform",
+          `rotate(${this.countryGradientSettings.rotate})`
+        );
+
+      this.countryGradient
+        .append("stop")
+        .attr(
+          "offset",
+          this.countryGradientSettings?.startColor?.offset ?? "0%"
+        )
+        .attr(
+          "stop-color",
+          this.countryGradientSettings?.startColor?.color ??
+            this.countryGradientSettings?.startColor ??
+            "#ffffff"
+        );
+      this.countryGradient
+        .append("stop")
+        .attr(
+          "offset",
+          this.countryGradientSettings?.endColor?.offset ?? "100%"
+        )
+        .attr(
+          "stop-color",
+          this.countryGradientSettings?.endColor?.color ??
+            this.countryGradientSettings?.endColor ??
+            "#000000"
+        );
+    }
+  }
+
   #setupZoom() {
     this.zoom = zoom()
       .scaleExtent([1, 20])
       .translateExtent([
         [0, 0],
-        [this.config.width, this.config.height],
+        [this.width, this.height],
       ])
       .on("zoom", (e) => zoomed(e, this));
 
@@ -95,11 +223,7 @@ export default class MetaMap {
     }
   }
 
-  #mapAccess(callback: (value: unknown) => unknown) {
-    if (!this.config.mapPath) {
-      throw new Error("mapPath is required!");
-    }
-
+  #mapAccess(callback) {
     json(this.config.mapPath).then(callback);
   }
 
@@ -158,17 +282,17 @@ export default class MetaMap {
     this.#mapAccess(() => {
       selectAll(`.country`)
         .on("click", ({ target }, data) =>
-          this.config.on.countryClick({
+          this.on.countryClick({
             target,
             data,
             metaMap: this,
           })
         )
         .on("mouseenter", ({ target }, data) =>
-          this.config.on.countryMouseEnter({ target, data, metaMap: this })
+          this.on.countryMouseEnter({ target, data, metaMap: this })
         )
         .on("mouseleave", ({ target }, data) =>
-          this.config.on.countryMouseLeave({ target, data, metaMap: this })
+          this.on.countryMouseLeave({ target, data, metaMap: this })
         );
     });
   }
@@ -177,13 +301,13 @@ export default class MetaMap {
     this.#mapAccess(() => {
       selectAll(`.marker`)
         .on("click", ({ target }, data) =>
-          this.config.on.markerClick({ target, data, metaMap: this })
+          this.on.markerClick({ target, data, metaMap: this })
         )
         .on("mouseenter", ({ target }, data) =>
-          this.config.on.markerMouseEnter({ target, data, metaMap: this })
+          this.on.markerMouseEnter({ target, data, metaMap: this })
         )
         .on("mouseleave", ({ target }, data) =>
-          this.config.on.markerMouseLeave({ target, data, metaMap: this })
+          this.on.markerMouseLeave({ target, data, metaMap: this })
         );
     });
   }
@@ -192,7 +316,7 @@ export default class MetaMap {
    * @description Select country by id
    * @param {string} id - country id
    */
-  selectCountry(id: string) {
+  selectCountry(id) {
     if (!id) throw new Error("id is required!");
 
     this.selectedCountries = [...this.selectedCountries, id];
@@ -200,8 +324,8 @@ export default class MetaMap {
     this.#mapAccess(() => {
       select(`#${id}`)
         .transition()
-        .style("fill", this.config.accentFillColor)
-        .style("stroke", this.config.accentStrokeColor);
+        .style("fill", this.accentFillColor)
+        .style("stroke", this.accentStrokeColor);
     });
   }
 
@@ -209,7 +333,7 @@ export default class MetaMap {
    * @description Select countries by id.
    * @param {string[]} idList - List of country ids.
    */
-  selectCountryList(idList: string[]) {
+  selectCountryList(idList) {
     if (!idList) throw new Error("idList is required!");
 
     this.#mapAccess(() => {
@@ -223,13 +347,13 @@ export default class MetaMap {
    * @description Unselect country by id.
    * @param {string} id - List of country ids.
    */
-  unselectCountry(id: string) {
+  unselectCountry(id) {
     if (!id) throw new Error("id is required!");
 
     select(`#${id}`)
       .transition()
-      .style("fill", this.config.countryFillColor)
-      .style("stroke", this.config.countryStrokeColor);
+      .style("fill", this.countryFillColor)
+      .style("stroke", this.countryStrokeColor);
   }
 
   /**
@@ -241,12 +365,12 @@ export default class MetaMap {
     this.#mapAccess(() => {
       selectAll(selector)
         .transition()
-        .style("fill", this.config.countryFillColor)
-        .style("stroke", this.config.countryStrokeColor);
+        .style("fill", this.countryFillColor)
+        .style("stroke", this.countryStrokeColor);
     });
   }
 
-  moveToCountry(id: string, metaMap = this) {
+  moveToCountry(id, metaMap = this) {
     if (!id) throw new Error("id is required!");
 
     this.#mapAccess(() => {
@@ -260,12 +384,12 @@ export default class MetaMap {
         1,
         Math.min(
           this.config.maxZoom,
-          0.9 / Math.max(dx / metaMap.config.width, dy / metaMap.config.height)
+          0.9 / Math.max(dx / metaMap.width, dy / metaMap.height)
         )
       );
       const translate = [
-        metaMap.config.width / 2 - scale * x,
-        metaMap.config.height / 2 - scale * y,
+        metaMap.width / 2 - scale * x,
+        metaMap.height / 2 - scale * y,
       ];
       metaMap.svg
         .transition()
@@ -277,7 +401,7 @@ export default class MetaMap {
     });
   }
 
-  moveToCountries(idList: string[], metaMap = this) {
+  moveToCountries(idList, metaMap = this) {
     if (!idList || !Array.isArray(idList))
       throw new Error(
         "idList is required and must be an array of country ids!"
@@ -301,13 +425,13 @@ export default class MetaMap {
       const scale = Math.max(
         1,
         Math.min(
-          this.config.maxZoom,
-          0.9 / Math.max(dx / metaMap.config.width, dy / metaMap.config.height)
+          this.maxZoom,
+          0.9 / Math.max(dx / metaMap.width, dy / metaMap.height)
         )
       );
       const translate = [
-        metaMap.config.width / 2 - scale * x,
-        metaMap.config.height / 2 - scale * y,
+        metaMap.width / 2 - scale * x,
+        metaMap.height / 2 - scale * y,
       ];
       metaMap.svg
         .transition()
@@ -319,7 +443,7 @@ export default class MetaMap {
     });
   }
 
-  zoomCountries(idList: string[]) {
+  zoomCountries(idList) {
     if (!idList)
       throw new Error('id "string" or idList "array of strings" is required!');
 
@@ -334,13 +458,13 @@ export default class MetaMap {
         const scale = Math.max(
           1,
           Math.min(
-            this.config.maxZoom,
-            0.9 / Math.max(dx / this.config.width, dy / this.config.height)
+            this.maxZoom,
+            0.9 / Math.max(dx / this.width, dy / this.height)
           )
         );
         const translate = [
-          this.config.width / 2 - scale * x,
-          this.config.height / 2 - scale * y,
+          this.width / 2 - scale * x,
+          this.height / 2 - scale * y,
         ];
         this.svg.call(
           this.zoom.transform,
@@ -365,13 +489,13 @@ export default class MetaMap {
         const scale = Math.max(
           1,
           Math.min(
-            this.config.maxZoom,
-            0.9 / Math.max(dx / this.config.width, dy / this.config.height)
+            this.maxZoom,
+            0.9 / Math.max(dx / this.width, dy / this.height)
           )
         );
         const translate = [
-          this.config.width / 2 - scale * x,
-          this.config.height / 2 - scale * y,
+          this.width / 2 - scale * x,
+          this.height / 2 - scale * y,
         ];
         this.svg.call(
           this.zoom.transform,

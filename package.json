@@ -10,8 +10,19 @@
     "preview": "vite preview"
   },
   "devDependencies": {
+    "@types/d3-fetch": "^3.0.7",
+    "@types/d3-geo": "^3.1.0",
+    "@types/d3-selection": "^3.0.10",
+    "@types/d3-zoom": "^3.0.8",
     "pnpm": "8.14.1",
     "typescript": "^5.2.2",
     "vite": "^5.0.8"
+  },
+  "dependencies": {
+    "d3-fetch": "^3.0.1",
+    "d3-geo": "^3.1.0",
+    "d3-selection": "^3.0.0",
+    "d3-zoom": "^3.0.0",
+    "pathe": "^1.1.2"
   }
 }
