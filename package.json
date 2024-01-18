@@ -15,6 +15,7 @@
     "d3-fetch": "^3.0.1",
     "d3-geo": "^3.1.0",
     "d3-selection": "^3.0.0",
+    "d3-transition": "^3.0.1",
     "d3-zoom": "^3.0.0",
     "pathe": "^1.1.2"
   },
@@ -25,7 +26,9 @@
     "@types/d3-fetch": "^3.0.7",
     "@types/d3-geo": "^3.1.0",
     "@types/d3-selection": "^3.0.10",
+    "@types/d3-transition": "^3.0.8",
     "@types/d3-zoom": "^3.0.8",
+    "@types/geojson": "^7946.0.13",
     "bumpp": "^9.3.0",
     "eslint": "^8.56.0",
     "lint-staged": "^15.2.0",
