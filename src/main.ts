@@ -36,27 +36,42 @@ export default class MetaMap {
 
   zoomedCountries: string[];
   selectedCountries: string[];
+  selectedGroup: string | null;
+  countryGroups: Map<string, string[]> | null;
   markers: any[];
 
+  mapInstancePromise: Promise<FeatureCollection | undefined>;
   svg: Selection<SVGSVGElement, unknown, HTMLElement, any>;
   scale: number;
   translate: [number, number];
   projection: GeoProjection;
   g: Selection<SVGGElement, unknown, HTMLElement, any>;
   path: GeoPath<any, GeoPermissibleObjects>;
-  zoom: ZoomBehavior<Element, unknown>;
+  zoom: ZoomBehavior<SVGSVGElement, unknown>;
 
-  // TODO: make default values object and rest with passed config object
   constructor(selector: string, config: MapConfig) {
     this.selector = selector;
     this.config = merge(configDefault, config);
+
+    this.mapInstancePromise = json<FeatureCollection>(this.config.mapPath);
 
     this.zoomedCountries = this.config.zoomedCountries;
 
     this.selectedCountries = this.config.selectedCountries;
 
+    this.selectedGroup = this.config.selectedGroup;
+
+    this.countryGroups = this.config.countryGroups
+      ? new Map(
+          this.config.countryGroups.map((obj) => {
+            return [obj.id, obj.countryList];
+          })
+        )
+      : null;
+
     this.markers = this.config.markers;
 
+    // SVG setup
     this.svg = select(this.selector)
       .append("svg")
       .attr("width", "100%")
@@ -76,7 +91,8 @@ export default class MetaMap {
     this.path = geoPath(this.projection);
     this.g = this.svg?.append("g");
 
-    this.zoom = zoom()
+    // Zoom setup
+    this.zoom = zoom<SVGSVGElement, unknown>()
       .scaleExtent([1, 20])
       .translateExtent([
         [0, 0],
@@ -88,46 +104,56 @@ export default class MetaMap {
       metaMap.g?.attr("transform", e?.transform);
     }
 
-    this.#mapAccess((data: unknown) => {
-      const featureData = data as FeatureCollection;
-      this.g
-        ?.selectAll("path")
-        .data(featureData.features)
-        .enter()
-        .append("path")
-        .attr("class", "country")
-        .attr("id", (d) => d.properties.id)
-        .attr("d", this.path);
+    if (this.config.isZoomable) {
+      this.svg.call(this.zoom);
+    }
+
+    // Countries data setup
+    this.mapInstancePromise.then((data) => {
+      if (data)
+        this.g
+          ?.selectAll("path")
+          .data(data.features)
+          .enter()
+          .append("path")
+          .attr("class", "country")
+          .attr("id", (d) => d.properties.id)
+          .attr("d", this.path);
 
       if (this.g?.node()?.childNodes[0] === this.g?.select(".markers").node())
         this.g?.append("use").attr("xlink:href", "#markers");
     });
 
-    this.init();
-  }
+    // Country groups setup
+    this.mapInstancePromise.then(() => {
+      this.countryGroups?.forEach((countryList, key) => {
+        const groupedCountriesSelector = countryList
+          .map((item) => `#${item}`)
+          .join(",");
 
-  init() {
+        selectAll(groupedCountriesSelector)
+          .attr("class", () => `country ${key}`)
+          .transition()
+          .style("fill", this.config.groupFillColor)
+          .style("stroke", this.config.countryStrokeColor);
+      });
+    });
+
     this.selectCountryList(this.selectedCountries);
 
-    if (this.zoomedCountries) this.zoomCountries(this.zoomedCountries);
+    this.zoomCountries(this.zoomedCountries);
 
     this.#setupCountryListeners();
 
-    // Markers init
+    // Markers setup
     setTimeout(() => {
       this.#markersRender();
       this.#setupMarkerListeners();
     });
   }
 
-  #mapAccess(callback: (value: unknown) => unknown) {
-    if (!this.config.mapPath) throw new Error("mapPath is required!");
-
-    json(this.config.mapPath).then(callback);
-  }
-
   #markersRender() {
-    this.#mapAccess(() => {
+    this.mapInstancePromise.then(() => {
       const markerGroup = this.g
         ?.append("g")
         .attr("class", "markers")
@@ -168,7 +194,7 @@ export default class MetaMap {
   }
 
   #setupCountryListeners() {
-    this.#mapAccess(() => {
+    this.mapInstancePromise.then(() => {
       selectAll(`.country`)
         .on("click", ({ target }, data) =>
           this.config.on.countryClick({
@@ -187,7 +213,7 @@ export default class MetaMap {
   }
 
   #setupMarkerListeners() {
-    this.#mapAccess(() => {
+    this.mapInstancePromise.then(() => {
       selectAll(`.marker`)
         .on("click", ({ target }, data) =>
           this.config.on.markerClick({ target, data, metaMap: this })
@@ -210,7 +236,7 @@ export default class MetaMap {
 
     this.selectedCountries = [...this.selectedCountries, id];
 
-    this.#mapAccess(() => {
+    this.mapInstancePromise.then(() => {
       select(`#${id}`)
         .transition()
         .style("fill", this.config.accentFillColor)
@@ -225,7 +251,7 @@ export default class MetaMap {
   selectCountryList(idList: string[]) {
     if (!idList) throw new Error("idList is required!");
 
-    this.#mapAccess(() => {
+    this.mapInstancePromise.then(() => {
       idList?.forEach((id) => {
         this.selectCountry(id);
       });
@@ -251,7 +277,7 @@ export default class MetaMap {
   unselectAllCountries() {
     const selector = this.selectedCountries.map((item) => `#${item}`).join(",");
 
-    this.#mapAccess(() => {
+    this.mapInstancePromise.then(() => {
       selectAll(selector)
         .transition()
         .style("fill", this.config.countryFillColor)
@@ -259,10 +285,56 @@ export default class MetaMap {
     });
   }
 
+  /**
+   * @description Select country group by  group id
+   * @param {string} groupId - group id
+   */
+  selectGroup(groupId: string) {
+    if (!groupId) throw new Error("groupId is required!");
+
+    this.selectedGroup = groupId;
+
+    const groupedCountriesSelector = this.countryGroups
+      ?.get(groupId)
+      ?.map((item) => `#${item}`)
+      .join(",");
+
+    if (groupedCountriesSelector)
+      this.mapInstancePromise.then(() => {
+        selectAll(groupedCountriesSelector)
+          .transition()
+          .style("fill", this.config.accentFillColor)
+          .style("stroke", this.config.accentStrokeColor);
+      });
+  }
+
+  /**
+   * @description Select country group by  group id
+   * @param {string} groupId - group id
+   */
+  unselectAllGroups() {
+    const groupedCountriesSelector = this.selectedGroup
+      ? this.countryGroups
+          ?.get(this.selectedGroup)
+          ?.map((item) => `#${item}`)
+          .join(",")
+      : null;
+
+    if (groupedCountriesSelector)
+      this.mapInstancePromise.then(() => {
+        selectAll(groupedCountriesSelector)
+          .transition()
+          .style("fill", this.config.groupFillColor)
+          .style("stroke", this.config.countryStrokeColor);
+      });
+
+    this.selectedGroup = null;
+  }
+
   moveToCountry(id: string, metaMap = this) {
     if (!id) throw new Error("id is required!");
 
-    this.#mapAccess(() => {
+    this.mapInstancePromise.then(() => {
       const [d] = select(`#${id}`).data();
       const bounds = metaMap.path.bounds(d as GeoPermissibleObjects);
       const dx = bounds[1][0] - bounds[0][0];
@@ -280,17 +352,14 @@ export default class MetaMap {
         metaMap.config.width / 2 - scale * x,
         metaMap.config.height / 2 - scale * y,
       ];
-      metaMap.svg
-        .transition()
-        .duration(750)
-        .call(
-          () => metaMap.zoom.transform,
-          // metaMap.zoom.transform as unknown as (
-          //   transition: Transition<SVGSVGElement, unknown, HTMLElement, any>,
-          //   ...args: any[]
-          // ) => any,
-          zoomIdentity.translate(translate[0], translate[1]).scale(scale)
-        );
+      metaMap.svg.transition().duration(750).call(
+        metaMap.zoom.transform,
+        // metaMap.zoom.transform as unknown as (
+        //   transition: Transition<SVGSVGElement, unknown, HTMLElement, any>,
+        //   ...args: any[]
+        // ) => any,
+        zoomIdentity.translate(translate[0], translate[1]).scale(scale)
+      );
     });
   }
 
@@ -301,7 +370,7 @@ export default class MetaMap {
       );
     }
 
-    this.#mapAccess(() => {
+    this.mapInstancePromise.then(() => {
       const [firstD] = select(`#${idList[0]}`).data();
       const resBounds = metaMap.path.bounds(firstD as GeoPermissibleObjects);
       idList.forEach((id) => {
@@ -331,7 +400,7 @@ export default class MetaMap {
         ?.transition()
         .duration(750)
         .call(
-          () => metaMap.zoom.transform,
+          metaMap.zoom.transform,
           zoomIdentity.translate(translate[0], translate[1]).scale(scale)
         );
     });
@@ -341,7 +410,7 @@ export default class MetaMap {
     if (!idList)
       throw new Error('id "string" or idList "array of strings" is required!');
 
-    this.#mapAccess(() => {
+    this.mapInstancePromise.then(() => {
       if (typeof idList === "string") {
         const [d] = select(`#${idList}`).data();
         const bounds = this.path?.bounds(d as GeoPermissibleObjects);
@@ -363,7 +432,7 @@ export default class MetaMap {
         this.svg
           ?.transition()
           .call(
-            () => this.zoom.transform,
+            this.zoom.transform,
             zoomIdentity.translate(translate[0], translate[1]).scale(scale)
           );
       }
@@ -397,7 +466,7 @@ export default class MetaMap {
           this.svg
             ?.transition()
             .call(
-              () => this.zoom.transform,
+              this.zoom.transform,
               zoomIdentity.translate(translate[0], translate[1]).scale(scale)
             );
         }

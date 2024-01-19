@@ -20,21 +20,26 @@ export const defaultMarkerStyle = {
 export const configDefault: MapConfig = {
   mapPath: `./public/map.geo.json`,
 
-  countryStrokeWidth: 0.25,
   selectedCountries: [],
+  countryGroups: [],
+  selectedGroup: null,
+
+  isZoomable: false,
   zoomedCountries: [],
   maxZoom: 20,
 
   markers: [],
   markerStyle: defaultMarkerStyle,
 
+  countryStrokeWidth: 0.25,
   accentFillColor: "red",
   accentStrokeColor: "#ffffff",
   countryFillColor: "#cccccc",
   countryStrokeColor: "#ffffff",
+  groupFillColor: "green",
 
   width: 900,
-  height: 900,
+  height: 600,
 
   on: defaultOn,
 };
