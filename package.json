@@ -25,17 +25,35 @@
     "preview": "vite preview",
     "prepare": "pnpm simple-git-hooks"
   },
+  "dependencies": {
+    "d3-fetch": "^3.0.1",
+    "d3-geo": "^3.1.0",
+    "d3-selection": "^3.0.0",
+    "d3-transition": "^3.0.1",
+    "d3-zoom": "^3.0.0",
+    "lodash": "^4.17.21",
+    "pathe": "^1.1.2"
+  },
   "devDependencies": {
     "@antfu/eslint-config": "^2.6.3",
     "@commitlint/cli": "^18.4.4",
     "@commitlint/config-conventional": "^18.4.4",
+    "@laynezh/vite-plugin-lib-assets": "^0.5.14",
+    "@types/d3-fetch": "^3.0.7",
+    "@types/d3-geo": "^3.1.0",
+    "@types/d3-selection": "^3.0.10",
+    "@types/d3-transition": "^3.0.8",
+    "@types/d3-zoom": "^3.0.8",
+    "@types/geojson": "^7946.0.13",
+    "@types/lodash": "^4.14.202",
     "bumpp": "^9.3.0",
     "eslint": "^8.56.0",
     "lint-staged": "^15.2.0",
     "pnpm": "8.14.1",
     "simple-git-hooks": "^2.9.0",
     "typescript": "^5.2.2",
-    "vite": "^5.0.8"
+    "vite": "^5.0.8",
+    "vite-plugin-static-copy": "^1.0.0"
   },
   "commitlint": {
     "extends": [
@@ -43,7 +61,6 @@
     ]
   },
   "simple-git-hooks": {
-    "pre-commit": "pnpm lint-staged",
     "commit-msg": "pnpm commitlint --edit ${1}"
   },
   "lint-staged": {
