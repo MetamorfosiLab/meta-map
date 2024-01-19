@@ -23,10 +23,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "prepare": "pnpm simple-git-hooks",
-    "publish": "pnpm run build && pnpm run bump && pnpm run release",
-    "bump": "bumpp",
-    "release": "git push --follow-tags origin main && npm publish --access public"
+    "prepare": "pnpm simple-git-hooks"
   },
   "dependencies": {
     "d3-fetch": "^3.0.1",
