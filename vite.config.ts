@@ -20,6 +20,7 @@ export default defineConfig({
       fileName: "meta-map",
       // formats: ["cjs", "es", "iife", "umd"],
     },
+    sourcemap: true,
   },
   resolve: {
     alias: {
