@@ -1,4 +1,4 @@
-import MapConfig from "./types/interfaces";
+import MapConfig from "./types";
 
 export const defaultOn = {
   countryClick: () => {},
@@ -18,7 +18,7 @@ export const defaultMarkerStyle = {
 };
 
 export const configDefault: MapConfig = {
-  mapPath: null,
+  mapPath: `./public/map.geo.json`,
 
   countryStrokeWidth: 0.25,
   selectedCountries: [],
