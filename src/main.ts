@@ -34,6 +34,8 @@ export default class MetaMap {
   selector: string;
   config: MapConfig;
 
+  isLoading: boolean;
+
   zoomedCountries: string[];
   selectedCountries: string[];
   selectedGroup: string | null;
@@ -48,10 +50,23 @@ export default class MetaMap {
   g: Selection<SVGGElement, unknown, HTMLElement, any>;
   path: GeoPath<any, GeoPermissibleObjects>;
   zoom: ZoomBehavior<SVGSVGElement, unknown>;
+  defs: Selection<SVGDefsElement, unknown, HTMLElement, any>;
+  pattern: Selection<SVGPatternElement, unknown, HTMLElement, any> | null;
+  patternGradient: Selection<
+    SVGLinearGradientElement,
+    unknown,
+    HTMLElement,
+    any
+  > | null;
+  patternFilter: Selection<SVGRectElement, unknown, HTMLElement, any> | null;
+  markerShadow: Selection<SVGFilterElement, unknown, HTMLElement, any> | null;
 
   constructor(selector: string, config: MapConfig) {
     this.selector = selector;
     this.config = merge(configDefault, config);
+
+    this.isLoading = true;
+    this.config.on.loadingStart();
 
     this.mapInstancePromise = json<FeatureCollection>(this.config.mapPath);
 
@@ -79,40 +94,123 @@ export default class MetaMap {
       .attr("preserveAspectRatio", "xMinYMin meet")
       .attr("viewBox", `0 0 ${this.config.width} ${this.config.height}`)
       .style("fill", this.config.countryFillColor)
-      .style("stroke", "#fff")
+      .style("stroke", this.config.countryStrokeColor)
       .style("stroke-width", `${this.config.countryStrokeWidth}px`);
 
-    this.scale = (this.config.width / (Math.PI * 2)) * 0.9 * 0.9;
+    // this.scale = (this.config.width / (Math.PI * 2)) * 0.9 * 0.9;
+    this.scale = this.config.width / (Math.PI * 2);
     this.translate = [this.config.width / 2, this.config.height / 1.4];
     this.projection = geoMercator()
       .fitSize([500, 500], {} as GeoGeometryObjects)
       .scale(this.scale)
       .translate(this.translate);
     this.path = geoPath(this.projection);
-    this.g = this.svg?.append("g");
+    this.g = this.svg.append("g");
 
     // Zoom setup
     this.zoom = zoom<SVGSVGElement, unknown>()
-      .scaleExtent([1, 20])
+      .scaleExtent([1, this.config.maxZoom])
       .translateExtent([
         [0, 0],
         [this.config.width, this.config.height],
       ])
-      .on("zoom", (e) => zoomed(e, this));
+      .on("zoom", (e, data) => {
+        zoomed(e, this);
+
+        this.config.on.zoom({ target: e.target, data, metaMap: this });
+      });
 
     function zoomed(e: { transform: number }, metaMap: MetaMap) {
-      metaMap.g?.attr("transform", e?.transform);
+      metaMap.g.attr("transform", e.transform);
     }
 
     if (this.config.isZoomable) {
       this.svg.call(this.zoom);
     }
 
+    if (this.config.zoomDefault) {
+      this.svg.call(this.zoom.scaleBy, this.config.zoomDefault);
+    }
+    if (this.config.translateDefault) {
+      const pos = this.projection(this.config.translateDefault);
+      if (pos) this.svg.call(this.zoom.translateTo, pos[0], pos[1]);
+    }
+
+    this.defs = this.svg.append("defs");
+    this.patternGradient = this.config.patternGradient?.(this.defs) ?? null;
+
+    this.patternFilter = null;
+
+    // Pattern setup
+    this.pattern = this.config.pattern?.(this.defs) ?? null;
+
+    if (this.pattern) {
+      this.g.style("fill", "url(#pattern)");
+      this.g.style("stroke", "url(#pattern)");
+    }
+
+    this.markerShadow = null;
+
+    if (this.config.markerStyle.shadow) {
+      if (!this.config.markerStyle.shadow.color)
+        throw new Error("Shadow color is require!");
+      if (!this.config.markerStyle.shadow.blur)
+        throw new Error("Shadow blur is require!");
+      if (!this.config.markerStyle.shadow.radius)
+        throw new Error("Shadow radius is require!");
+
+      this.markerShadow = this.defs
+        .append("filter")
+        .attr("id", "markerShadow")
+        .attr("x", "-100%")
+        .attr("y", "-100%")
+        .attr("width", "300%")
+        .attr("height", "300%")
+        .attr("filterUnits", "userSpaceOnUse")
+        .attr("color-interpolation-filters", "sRGB");
+
+      this.markerShadow
+        .append("feFlood")
+        .attr("flood-color", this.config.markerStyle.shadow.color)
+        .attr("result", "flood")
+        .attr("in", "SourceAlpha");
+      this.markerShadow
+        .append("feComposite")
+        .attr("in2", "SourceAlpha")
+        .attr("in", "flood")
+        .attr("operator", "atop")
+        .attr("result", "color");
+      this.markerShadow
+        .append("feMorphology")
+        .attr("operator", "dilate")
+        .attr("radius", this.config.markerStyle.shadow.radius)
+        .attr("result", "spread")
+        .attr("in", "color");
+      this.markerShadow
+        .append("feGaussianBlur")
+        .attr("in", "spread")
+        .attr("stdDeviation", this.config.markerStyle.shadow.blur)
+        .attr("result", "shadow");
+      this.markerShadow
+        .append("feOffset")
+        .attr("dx", 0)
+        .attr("dy", 0)
+        .attr("in", "shadow")
+        .attr("result", "offset");
+
+      const feMerge = this.markerShadow
+        .append("feMerge")
+        .attr("result", "merge");
+
+      feMerge.append("feMergeNode").attr("in", "offset");
+      feMerge.append("feMergeNode").attr("in", "SourceGraphic");
+    }
+
     // Countries data setup
     this.mapInstancePromise.then((data) => {
       if (data)
         this.g
-          ?.selectAll("path")
+          .selectAll("path")
           .data(data.features)
           .enter()
           .append("path")
@@ -120,8 +218,24 @@ export default class MetaMap {
           .attr("id", (d) => d.properties.id)
           .attr("d", this.path);
 
-      if (this.g?.node()?.childNodes[0] === this.g?.select(".markers").node())
-        this.g?.append("use").attr("xlink:href", "#markers");
+      if (this.patternGradient) {
+        this.patternFilter = this.g
+          .append("rect")
+          .attr("id", "patternFilter")
+          .attr("x", 0)
+          .attr("y", 0)
+          .attr("width", "100%")
+          .attr("height", "100%")
+          .style("fill", "url(#patternGradient)")
+          .style("mix-blend-mode", "color")
+          .style("pointer-events", "none");
+      }
+
+      if (this.g.node()?.childNodes[0] === this.g.select(".markers").node())
+        this.g.append("use").attr("xlink:href", "#markers");
+
+      this.isLoading = false;
+      this.config.on.loaded();
     });
 
     // Country groups setup
@@ -155,16 +269,16 @@ export default class MetaMap {
   #markersRender() {
     this.mapInstancePromise.then(() => {
       const markerGroup = this.g
-        ?.append("g")
+        .append("g")
         .attr("class", "markers")
         .attr("id", "markers");
       const markers = markerGroup
-        ?.selectAll(".marker")
+        .selectAll(".marker")
         .data(this.markers)
         .enter();
-      if (this.config.markerStyle.img) {
+      if (this.config.markerStyle.type === "image") {
         markers
-          ?.append("svg:image")
+          .append("svg:image")
           .attr("x", (d) => {
             const xPosition = this.projection([d.long, d.lat])?.[0] ?? null;
 
@@ -180,15 +294,19 @@ export default class MetaMap {
           })
           .attr("width", this.config.markerStyle.width)
           .attr("height", this.config.markerStyle.height)
-          .attr("xlink:href", this.config.markerStyle.img);
+          .attr("xlink:href", this.config.markerStyle.img)
+          .attr("filter", "url(#markerShadow)");
       } else {
         markers
-          ?.append("circle")
+          .append("circle")
           .attr("class", "marker")
           .attr("r", this.config.markerStyle.radius)
           .attr("cx", (d) => this.projection([d.long, d.lat])?.[0] ?? null)
           .attr("cy", (d) => this.projection([d.long, d.lat])?.[1] ?? null)
-          .style("fill", this.config.markerStyle.color);
+          .style("fill", this.config.markerStyle.color)
+          .style("stroke-width", this.config.markerStyle.strokeWidth + "px")
+          .style("stroke", this.config.markerStyle.strokeColor)
+          .attr("filter", "url(#markerShadow)");
       }
     });
   }
@@ -252,7 +370,7 @@ export default class MetaMap {
     if (!idList) throw new Error("idList is required!");
 
     this.mapInstancePromise.then(() => {
-      idList?.forEach((id) => {
+      idList.forEach((id) => {
         this.selectCountry(id);
       });
     });
@@ -352,14 +470,13 @@ export default class MetaMap {
         metaMap.config.width / 2 - scale * x,
         metaMap.config.height / 2 - scale * y,
       ];
-      metaMap.svg.transition().duration(750).call(
-        metaMap.zoom.transform,
-        // metaMap.zoom.transform as unknown as (
-        //   transition: Transition<SVGSVGElement, unknown, HTMLElement, any>,
-        //   ...args: any[]
-        // ) => any,
-        zoomIdentity.translate(translate[0], translate[1]).scale(scale)
-      );
+      metaMap.svg
+        .transition()
+        .duration(750)
+        .call(
+          metaMap.zoom.transform,
+          zoomIdentity.translate(translate[0], translate[1]).scale(scale)
+        );
     });
   }
 
@@ -397,7 +514,7 @@ export default class MetaMap {
         metaMap.config.height / 2 - scale * y,
       ];
       metaMap.svg
-        ?.transition()
+        .transition()
         .duration(750)
         .call(
           metaMap.zoom.transform,
@@ -406,14 +523,14 @@ export default class MetaMap {
     });
   }
 
-  zoomCountries(idList: string[]) {
+  zoomCountries(idList: string[] | string) {
     if (!idList)
       throw new Error('id "string" or idList "array of strings" is required!');
 
     this.mapInstancePromise.then(() => {
       if (typeof idList === "string") {
         const [d] = select(`#${idList}`).data();
-        const bounds = this.path?.bounds(d as GeoPermissibleObjects);
+        const bounds = this.path.bounds(d as GeoPermissibleObjects);
         const dx = bounds[1][0] - bounds[0][0];
         const dy = bounds[1][1] - bounds[0][1];
         const x = (bounds[0][0] + bounds[1][0]) / 2;
@@ -430,18 +547,18 @@ export default class MetaMap {
           this.config.height / 2 - scale * y,
         ];
         this.svg
-          ?.transition()
+          .transition()
           .call(
             this.zoom.transform,
             zoomIdentity.translate(translate[0], translate[1]).scale(scale)
           );
       }
-      if (Array.isArray(idList)) {
+      if (Array.isArray(idList) && idList.length > 0) {
         const [firstD] = select(`#${idList[0]}`).data();
-        const resBounds = this.path?.bounds(firstD as GeoPermissibleObjects);
+        const resBounds = this.path.bounds(firstD as GeoPermissibleObjects);
         idList.forEach((id) => {
           const [d] = select(`#${id}`).data();
-          const bounds = this.path?.bounds(d as GeoPermissibleObjects);
+          const bounds = this.path.bounds(d as GeoPermissibleObjects);
           if (resBounds[0][0] > bounds[0][0]) resBounds[0][0] = bounds[0][0];
           if (resBounds[0][1] > bounds[0][1]) resBounds[0][1] = bounds[0][1];
           if (resBounds[1][0] < bounds[1][0]) resBounds[1][0] = bounds[1][0];
@@ -462,14 +579,13 @@ export default class MetaMap {
           this.config.width / 2 - scale * x,
           this.config.height / 2 - scale * y,
         ];
-        if (this.zoom) {
-          this.svg
-            ?.transition()
-            .call(
-              this.zoom.transform,
-              zoomIdentity.translate(translate[0], translate[1]).scale(scale)
-            );
-        }
+
+        this.svg
+          .transition()
+          .call(
+            this.zoom.transform,
+            zoomIdentity.translate(translate[0], translate[1]).scale(scale)
+          );
       }
     });
   }

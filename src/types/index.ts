@@ -1,3 +1,4 @@
+import { Selection } from "d3-selection";
 import type { Position } from "geojson";
 
 export interface GeoJsonFeature {
@@ -28,13 +29,37 @@ export interface CountryGradientSettings {
   };
 }
 
-export interface MarkerStyle {
+export interface Marker {
+  long: number;
+  lat: number;
+  [key: string]: any;
+}
+
+interface MarkerShadow {
   color: string;
-  img: string | null;
+  radius: number;
+  blur: number;
+}
+
+interface BaseMarkerStyle {
   width: number;
   height: number;
-  radius: number;
+  shadow: MarkerShadow | null;
 }
+
+interface MarkerImageStyle extends BaseMarkerStyle {
+  type: "image";
+  img: string;
+}
+interface MarkerPinStyle extends BaseMarkerStyle {
+  type: "pin";
+  color: string;
+  radius: number;
+  strokeWidth: number;
+  strokeColor: string;
+}
+
+export type MarkerStyle = MarkerImageStyle | MarkerPinStyle;
 
 export interface CountryGroup {
   id: string;
@@ -46,6 +71,8 @@ export interface MapConfig {
   isZoomable: boolean;
   maxZoom: number;
   zoomedCountries: string[];
+  zoomDefault: number | null;
+  translateDefault: [number, number] | null;
   selectedCountries: string[];
   countryGroups: CountryGroup[];
   selectedGroup: string | null;
@@ -57,8 +84,18 @@ export interface MapConfig {
   groupFillColor: string;
   width: number;
   height: number;
-  markers: any[]; // Потрібно визначити тип масиву для маркерів
+  markers: Marker[];
   markerStyle: MarkerStyle;
+  pattern:
+    | ((
+        defs: Selection<SVGDefsElement, unknown, HTMLElement, any>
+      ) => Selection<SVGPatternElement, unknown, HTMLElement, any>)
+    | null;
+  patternGradient:
+    | ((
+        defs: Selection<SVGDefsElement, unknown, HTMLElement, any>
+      ) => Selection<SVGLinearGradientElement, unknown, HTMLElement, any>)
+    | null;
   on: {
     countryClick: Function;
     countryMouseEnter: Function;
@@ -66,6 +103,9 @@ export interface MapConfig {
     markerClick: Function;
     markerMouseEnter: Function;
     markerMouseLeave: Function;
+    zoom: Function;
+    loaded: Function;
+    loadingStart: Function;
   };
 }
 

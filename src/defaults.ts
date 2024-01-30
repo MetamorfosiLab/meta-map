@@ -1,20 +1,26 @@
-import MapConfig from "./types";
+import MapConfig, { MarkerStyle } from "./types";
 
 export const defaultOn = {
+  loadingStart: () => {},
+  loaded: () => {},
   countryClick: () => {},
   countryMouseEnter: () => {},
   countryMouseLeave: () => {},
   markerClick: () => {},
   markerMouseEnter: () => {},
   markerMouseLeave: () => {},
+  zoom: () => {},
 };
 
-export const defaultMarkerStyle = {
+export const defaultMarkerStyle: MarkerStyle = {
+  type: "pin",
   color: "blue",
-  img: null,
   width: 20,
   height: 20,
   radius: 2,
+  strokeWidth: 0,
+  strokeColor: "transparent",
+  shadow: null,
 };
 
 export const configDefault: MapConfig = {
@@ -27,6 +33,8 @@ export const configDefault: MapConfig = {
   isZoomable: false,
   zoomedCountries: [],
   maxZoom: 20,
+  zoomDefault: null,
+  translateDefault: null,
 
   markers: [],
   markerStyle: defaultMarkerStyle,
@@ -40,6 +48,9 @@ export const configDefault: MapConfig = {
 
   width: 900,
   height: 600,
+
+  pattern: null,
+  patternGradient: null,
 
   on: defaultOn,
 };
